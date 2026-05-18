@@ -1,0 +1,13 @@
+node_modules
+.pnpm
+.turbo
+.next
+dist
+.next
+coverage
+.DS_Store
+.env
+*.local
+*.log
+README.md
+LICENSE

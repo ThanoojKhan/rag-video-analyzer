@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "declaration": true,
+    "declarationMap": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "allowJs": false,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@rag/shared": ["packages/shared/src/index.ts"],
+      "@rag/shared/*": ["packages/shared/src/*"],
+      "@rag/ui": ["packages/ui/src/index.ts"],
+      "@rag/db": ["packages/db/src/index.ts"],
+      "@rag/ai": ["packages/ai/src/index.ts"]
+    }
+  }
+}

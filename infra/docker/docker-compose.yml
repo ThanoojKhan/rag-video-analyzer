@@ -1,0 +1,44 @@
+services:
+  # Local stateful infrastructure only. Application processes run on the host for fast feedback.
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '15432:5432'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - rag_local
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d ragdb']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '16379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag_local
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:
+  redis_data:
+
+networks:
+  rag_local:
+    driver: bridge

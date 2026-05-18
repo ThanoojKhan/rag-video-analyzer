@@ -1,0 +1,24 @@
+{
+  "name": "@rag/ingestion-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --build",
+    "lint": "eslint . --ext .ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rag/shared": "workspace:^",
+    "dotenv": "^16.4.3",
+    "pino": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.22.1",
+    "typescript": "^5.6.0"
+  }
+}
