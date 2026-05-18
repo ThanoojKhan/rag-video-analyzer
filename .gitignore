@@ -1,13 +1,36 @@
-node_modules
-.pnpm
-.turbo
-.next
-dist
-.next
-coverage
-.DS_Store
+# Dependencies
+node_modules/
+.pnpm/
+
+# Build & outputs
+dist/
+out/
+build/
+.next/
+.turbo/
+
+# Environment
 .env
-*.local
+.env.local
+.env*.local
+
+# IDE & Editor
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.AppleDouble
+
+# Logs & coverage
 *.log
-README.md
-LICENSE
+coverage/
+.eslintcache
+
+# Development
+*.local
+prisma/*.db
