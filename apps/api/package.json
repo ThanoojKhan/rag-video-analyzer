@@ -19,7 +19,9 @@
     "pino": "^8.18.0",
     "zod": "^3.23.0",
     "@rag/shared": "workspace:^",
-    "@rag/db": "workspace:^"
+    "@rag/db": "workspace:^",
+    "@rag/ai": "workspace:^",
+    "@rag/providers": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

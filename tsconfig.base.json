@@ -25,7 +25,9 @@
       "@rag/shared/*": ["packages/shared/src/*"],
       "@rag/ui": ["packages/ui/src/index.ts"],
       "@rag/db": ["packages/db/src/index.ts"],
-      "@rag/ai": ["packages/ai/src/index.ts"]
+      "@rag/ai": ["packages/ai/src/index.ts"],
+      "@rag/providers": ["packages/providers/src/index.ts"],
+      "@rag/providers/*": ["packages/providers/src/*"]
     }
   }
 }

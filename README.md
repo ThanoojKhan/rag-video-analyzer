@@ -87,11 +87,13 @@ pnpm dev:worker
 
 Default local endpoints:
 
-- API: `http://localhost:4000`
-- Health: `http://localhost:4000/health`
-- Web: `http://localhost:3000`
-- Postgres: `localhost:15432`
-- Redis: `localhost:16379`
+- API: `http://127.0.0.1:4000`
+- Health: `http://127.0.0.1:4000/health`
+- Web: `http://127.0.0.1:3000`
+- Postgres: `127.0.0.1:15432`
+- Redis: `127.0.0.1:16379`
+
+> Use `127.0.0.1` on Windows to avoid potential `localhost`/IPv6 hostname resolution issues when the frontend calls the backend.
 
 ## Commands
 
@@ -113,9 +115,9 @@ Environment variables are validated with Zod at process startup. Invalid values 
 
 The API expects:
 
-- `HOST`
+- `HOST` (recommended: `127.0.0.1` for local development)
 - `PORT`
-- `PORT_FALLBACK`
+- `PORT_FALLBACK` (default: `false`)
 - `NODE_ENV`
 - `LOG_LEVEL`
 - `DATABASE_URL`
@@ -140,7 +142,9 @@ The API starts in a strict order:
 4. Bind the HTTP listener.
 5. Log process metadata and selected port.
 
-If the configured port is occupied in development and `PORT_FALLBACK=true`, the API tries the next available ports and logs the selected fallback. In production, port fallback should be disabled so deployment configuration stays explicit.
+If the configured port is occupied in development and `PORT_FALLBACK=true`, the API tries the next available ports and logs the selected fallback. If `PORT_FALLBACK` is unset or `false`, the API fails loudly instead of silently moving to a new port. In production, port fallback should be disabled so deployment configuration stays explicit.
+
+> On Windows, `localhost` may resolve through IPv6 to another service such as Docker. Use `127.0.0.1` if the API appears to be unavailable on `localhost:4000`.
 
 Shutdown is idempotent. `SIGINT`, `SIGTERM`, unhandled rejections, and uncaught exceptions all flow through app close, which disconnects Prisma before the process exits.
 
@@ -243,7 +247,7 @@ Each step should ship with migrations, typed contracts, tests around boundary be
 
 ## Local Troubleshooting
 
-- Port occupied: the API logs the occupied port and a hint. Stop the process using the port or set `PORT` to a free value. In development, `PORT_FALLBACK=true` allows automatic fallback.
+- Port occupied: the API logs the occupied port and a hint. Stop the process using the port or set `PORT` to a free value. In development, `PORT_FALLBACK=true` allows explicit fallback, but otherwise the API fails fast. Make sure `NEXT_PUBLIC_API_BASE_URL` in the web app matches the backend host and port, and prefer `127.0.0.1` on Windows to avoid `localhost`/IPv6 ambiguity.
 - Postgres unavailable: run `pnpm docker:up` and verify Docker reports `db` as healthy.
 - Redis unavailable: run `pnpm docker:up` and verify Docker reports `redis` as healthy.
 - Prisma `DATABASE_URL` missing: use the package scripts such as `pnpm --filter @rag/db migrate:status`; they load the root `.env`.

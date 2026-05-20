@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { healthResponseSchema } from '@rag/shared';
+import { healthResponseSchema, type HealthResponse } from '@rag/shared';
 
 export async function healthRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/health', async () => {
+  const handler = async (): Promise<HealthResponse> => {
     const payload = {
       status: 'ok' as const,
       uptimeSeconds: Math.round(process.uptime()),
@@ -10,5 +10,8 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     };
 
     return healthResponseSchema.parse(payload);
-  });
+  };
+
+  app.get('/health', handler);
+  app.get('/api/health', handler);
 }

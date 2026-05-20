@@ -16,7 +16,7 @@ describe('appEnvSchema', () => {
 
     expect(env.PORT).toBe(4010);
     expect(env.HOST).toBe('0.0.0.0');
-    expect(env.PORT_FALLBACK).toBe(true);
+    expect(env.PORT_FALLBACK).toBe(false);
     expect(env.LOG_LEVEL).toBe('info');
   });
 

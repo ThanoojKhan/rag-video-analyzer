@@ -19,9 +19,11 @@ async function start(): Promise<void> {
     const port = await listenWithLocalFallback(env.PORT);
     app.log.info(
       {
-        port,
+        requestedPort: env.PORT,
+        activePort: port,
         host: env.HOST,
         nodeEnv: env.NODE_ENV,
+        fallbackEnabled: env.NODE_ENV === 'development' && env.PORT_FALLBACK,
         pid: process.pid,
         uptimeSeconds: Math.round(process.uptime()),
       },
@@ -35,20 +37,22 @@ async function start(): Promise<void> {
 }
 
 async function listenWithLocalFallback(preferredPort: number): Promise<number> {
-  const maxAttempts = env.NODE_ENV === 'development' && env.PORT_FALLBACK ? 10 : 1;
+  const fallbackEnabled = env.NODE_ENV === 'development' && env.PORT_FALLBACK;
+  const maxAttempts = fallbackEnabled ? 10 : 1;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const port = preferredPort + attempt;
 
     try {
       await app.listen({ port, host: env.HOST });
-      if (port !== preferredPort) {
+      if (fallbackEnabled && port !== preferredPort) {
         app.log.warn(
           {
             requestedPort: preferredPort,
-            selectedPort: port,
+            activePort: port,
+            fallbackEnabled,
           },
-          'Requested API port was occupied; started on fallback port',
+          'Requested API port was occupied; started on explicit fallback port',
         );
       }
       return port;
@@ -57,14 +61,15 @@ async function listenWithLocalFallback(preferredPort: number): Promise<number> {
         throw error;
       }
 
-      app.log.warn(
+      app.log.error(
         {
-          port,
-          fallbackEnabled: env.NODE_ENV === 'development' && env.PORT_FALLBACK,
-          hint:
-            env.NODE_ENV === 'development'
-              ? 'Stop the process using this port or set PORT to a free value in .env.'
-              : 'Set PORT to a free value or stop the conflicting process before restarting.',
+          requestedPort: preferredPort,
+          attemptedPort: port,
+          host: env.HOST,
+          fallbackEnabled,
+          hint: fallbackEnabled
+            ? 'The requested port is occupied. Stop the conflicting process or set PORT to a free value. PORT_FALLBACK=true is explicitly enabled.'
+            : 'The requested port is occupied. Stop the conflicting process or set PORT to a free value before restarting.',
         },
         'API port is already in use',
       );

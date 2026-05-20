@@ -20,7 +20,7 @@ export const appEnvSchema = z
   .object({
     HOST: z.string().default('0.0.0.0'),
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-    PORT_FALLBACK: envBooleanSchema.default(true),
+    PORT_FALLBACK: envBooleanSchema.default(false),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])

@@ -7,10 +7,108 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Video {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  metadata    Json?
-  createdAt   DateTime @default(now())
+// Enum for video ingestion status
+enum IngestionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  RETRYING
 }
+
+// Enum for transcript source type
+enum TranscriptSourceType {
+  NATIVE
+  EXTRACTED
+  GENERATED
+}
+
+// Main videos table
+model Video {
+  id                String   @id @default(uuid())
+  
+  // Platform information
+  platform          String   // 'youtube', 'instagram', 'tiktok'
+  platformVideoId   String   // Provider-specific video ID
+  canonicalUrl      String   @unique
+  
+  // Metadata
+  title             String
+  description       String?
+  creatorName       String?
+  creatorHandle     String?
+  followerCount     Int      @default(0)
+  views             Int      @default(0)
+  likes             Int      @default(0)
+  comments          Int      @default(0)
+  engagementRate    Float    @default(0)
+  durationSeconds   Int      @default(0)
+  hashtags          String[] @default([])
+  thumbnailUrl      String?
+  uploadDate        DateTime?
+  
+  // Ingestion tracking
+  ingestionStatus   IngestionStatus @default(PENDING)
+  lastIngestedAt    DateTime?
+  
+  // Relationships
+  transcriptSegments TranscriptSegment[]
+  ingestionJobs      IngestionJob[]
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Indexes
+  @@unique([platform, platformVideoId])
+  @@index([platform])
+  @@index([ingestionStatus])
+  @@index([createdAt])
+  @@index([lastIngestedAt])
+}
+
+// Transcript segments table
+model TranscriptSegment {
+  id              String   @id @default(uuid())
+  videoId         String
+  video           Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  sequenceIndex   Int
+  startSeconds    Float
+  endSeconds      Float
+  text            String   @db.Text
+  sourceType      TranscriptSourceType
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  
+  // Indexes
+  @@unique([videoId, sequenceIndex])
+  @@index([videoId])
+  @@index([sourceType])
+}
+
+// Ingestion jobs table for tracking lifecycle
+model IngestionJob {
+  id              String   @id @default(uuid())
+  videoId         String
+  video           Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  provider        String   // 'youtube', 'instagram', 'tiktok'
+  status          IngestionStatus
+  retryCount      Int      @default(0)
+  failureReason   String?  @db.Text
+  
+  // Timestamps
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Indexes
+  @@index([videoId])
+  @@index([status])
+  @@index([provider])
+  @@index([createdAt])
+}
+
