@@ -9,7 +9,7 @@ Instead of watching hours of videos to find specific talking points, you can jus
 The codebase is split up into a few distinct pieces:
 
 - **The Web App (`apps/web`):** Built with Next.js. It's mostly just a clean UI where you can paste two video URLs side-by-side and chat with them.
-- **The API (`apps/api`):** A Fastify server that handles the chat streaming (using Server-Sent Events) and kicks off ingestion jobs. We use LangGraph here to strictly control how the context is fetched and passed to the LLM.
+- **The API (`apps/api`):** A Fastify server that handles the chat streaming (using Server-Sent Events) and kicks off ingestion jobs. We use LangGraph here to strictly control how the context is fetched and passed to the LLM. It includes a robust `ModelRouter` that seamlessly falls back across different Gemini endpoints (`gemini-3.1-flash-lite`, `gemini-2-flash-lite`, `gemini-2-flash`) to gracefully handle rate limits (`429 Too Many Requests`) without breaking the UI.
 - **The Worker (`workers/ingestion-worker`):** A background process that polls Postgres for new videos. When it finds one, it downloads the audio/transcript, chunks the text, and generates vector embeddings locally using ONNX transformers (`bge-small-en-v1.5`).
 - **The Database:** Postgres with `pgvector`. It stores all the metadata and embeddings together so we can filter by video ID before doing the heavy KNN similarity math.
 

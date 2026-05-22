@@ -19,6 +19,7 @@ import {
 import { RetrievalService } from './retrieval-service.js';
 import { ConversationMemoryStore, conversationStore } from './memory-store.js';
 import { buildSystemPrompt, buildUserPrompt, buildNoContextResponse } from './prompts.js';
+import { globalModelRouter } from './model-router.js';
 
 export interface OrchestratorLogger {
   info(msg: string, meta?: unknown): void;
@@ -143,11 +144,13 @@ export class RAGOrchestrator {
     this.googleApiKey = deps.googleApiKey ?? process.env.GOOGLE_API_KEY;
     this.isMockMode = !this.googleApiKey && process.env.NODE_ENV !== 'production';
     this.compiledGraph = this.buildGraph();
+    globalModelRouter.setLogger(this.logger);
   }
 
-  public _createModel(opts?: { streaming?: boolean }): ChatGoogleGenerativeAI {
+  public _createModel(modelName: string, opts?: { streaming?: boolean }): ChatGoogleGenerativeAI {
     return new ChatGoogleGenerativeAI({
-      model: 'gemini-2.5-flash',
+      model: modelName,
+      maxOutputTokens: 600,
       temperature: 0.2,
       apiKey: this.googleApiKey,
       ...(opts?.streaming ? { streaming: true } : {}),
@@ -180,10 +183,14 @@ export class RAGOrchestrator {
         filters.maxStartSeconds = 15;
       }
 
+      const memoryTurns = this.memoryStore.getRecentTurns(state.conversationId, 1);
+      const isFollowUp = memoryTurns.length > 0;
+      const effectiveLimit = isFollowUp ? Math.min(state.limit, 4) : state.limit;
+
       const retrievalContext = await this.retrievalService.retrieve({
         textQuery: state.question,
         scope: state.classifiedScope,
-        limit: state.limit,
+        limit: effectiveLimit,
         filters: Object.keys(filters).length > 0 ? filters : undefined,
       });
 
@@ -241,59 +248,75 @@ export class RAGOrchestrator {
       };
     }
 
-    try {
-      const model = this._createModel();
+    const messages = [new SystemMessage(state.systemPrompt), new HumanMessage(state.userPrompt)];
+    let lastError: Error | null = null;
+    let msgError = '';
 
-      const messages = [new SystemMessage(state.systemPrompt), new HumanMessage(state.userPrompt)];
-
-      const response = await model.invoke(messages);
-      const rawAnswer =
-        typeof response.content === 'string'
-          ? response.content
-          : response.content
-              .filter(
-                (c: unknown): c is { type: 'text'; text: string } =>
-                  typeof c === 'object' &&
-                  c !== null &&
-                  'type' in c &&
-                  (c as Record<string, unknown>).type === 'text',
-              )
-              .map((c) => c.text)
-              .join('');
-
-      return {
-        rawAnswer,
-        timings: { synthesize: Date.now() - t0 },
-      };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-
-      let typedError: Error = err as Error;
-      const status =
-        typeof err === 'object' && err !== null && 'status' in err
-          ? Number((err as Record<string, unknown>).status)
-          : undefined;
-
-      if (status === 429) {
-        typedError = new ProviderQuotaExceededError(msg, 429);
-        ProviderHealthTracker.reportError(typedError as ProviderQuotaExceededError);
-      } else if (status !== undefined && status >= 500) {
-        typedError = new ProviderTransientError(msg, status);
-        ProviderHealthTracker.reportError(typedError as ProviderTransientError);
-      }
-
-      this.logger.error('[node:synthesize] Gemini call failed', { error: msg });
-
-      if (process.env.NODE_ENV === 'development') {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const modelName = globalModelRouter.getActiveModel();
+      if (!modelName) {
+        this.logger.warn('[node:synthesize] All models exhausted. Falling back to mock synthesis.');
         return {
           rawAnswer: buildMockAnswer(state.question, ctx),
-          errors: [msg],
           timings: { synthesize: Date.now() - t0 },
         };
       }
 
-      throw typedError;
+      try {
+        const model = this._createModel(modelName);
+        const response = await model.invoke(messages);
+        const rawAnswer =
+          typeof response.content === 'string'
+            ? response.content
+            : response.content
+                .filter(
+                  (c: unknown): c is { type: 'text'; text: string } =>
+                    typeof c === 'object' &&
+                    c !== null &&
+                    'type' in c &&
+                    (c as Record<string, unknown>).type === 'text',
+                )
+                .map((c) => c.text)
+                .join('');
+
+        return {
+          rawAnswer,
+          timings: { synthesize: Date.now() - t0 },
+        };
+      } catch (err) {
+        msgError = err instanceof Error ? err.message : String(err);
+        const status =
+          typeof err === 'object' && err !== null && 'status' in err
+            ? Number((err as Record<string, unknown>).status)
+            : undefined;
+
+        this.logger.warn(`[node:synthesize] Gemini call failed for ${modelName}`, {
+          error: msgError,
+        });
+        globalModelRouter.reportFailure(modelName, status);
+        lastError = err as Error;
+
+        if (status === 429) {
+          ProviderHealthTracker.reportError(new ProviderQuotaExceededError(msgError, 429));
+        } else if (status !== undefined && status >= 500) {
+          ProviderHealthTracker.reportError(new ProviderTransientError(msgError, status));
+        } else {
+          break; // non-retriable error
+        }
+      }
     }
+
+    this.logger.error('[node:synthesize] All synthesis attempts failed', { error: msgError });
+
+    if (process.env.NODE_ENV === 'development') {
+      return {
+        rawAnswer: buildMockAnswer(state.question, ctx),
+        errors: [msgError],
+        timings: { synthesize: Date.now() - t0 },
+      };
+    }
+
+    throw lastError || new Error(msgError);
   }
 
   private async formatResponse(state: RAGState): Promise<Partial<RAGState>> {
@@ -428,10 +451,14 @@ export class RAGOrchestrator {
       let retrievalContext: (RetrievalContext & { diagnostics?: RetrievalDiagnostics }) | null =
         null;
       try {
+        const memoryTurns = this.memoryStore.getRecentTurns(conversationId, 1);
+        const isFollowUp = memoryTurns.length > 0;
+        const effectiveLimit = isFollowUp ? Math.min(request.limit, 4) : request.limit;
+
         retrievalContext = await this.retrievalService.retrieve({
           textQuery: request.message,
           scope: classifiedScope,
-          limit: request.limit,
+          limit: effectiveLimit,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -462,51 +489,94 @@ export class RAGOrchestrator {
           await new Promise<void>((r) => setTimeout(r, 8));
         }
       } else {
-        // Live Gemini streaming
-        const model = this._createModel({ streaming: true });
+        // Live Gemini streaming with Fallback Router
+        let streamSuccess = false;
+        let lastError: Error | null = null;
+        let msgError = '';
 
-        const messages = [new SystemMessage(systemPrompt), new HumanMessage(userPrompt)];
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const modelName = globalModelRouter.getActiveModel();
+          if (!modelName) {
+            this.logger.warn(
+              '[orchestrator:stream] All models exhausted. Falling back to mock synthesis stream.',
+            );
+            rawAnswer = buildMockAnswer(request.message, retrievalContext!);
+            for (const word of rawAnswer.split(' ')) {
+              yield { type: 'token', content: word + ' ' };
+              await new Promise<void>((r) => setTimeout(r, 8));
+            }
+            streamSuccess = true;
+            break;
+          }
 
-        try {
-          const stream = await model.stream(messages);
-          for await (const chunk of stream) {
-            const tokenContent =
-              typeof chunk.content === 'string'
-                ? chunk.content
-                : (chunk.content as unknown[])
-                    .filter(
-                      (c: unknown): c is { type: 'text'; text: string } =>
-                        typeof c === 'object' &&
-                        c !== null &&
-                        'type' in c &&
-                        (c as Record<string, unknown>).type === 'text',
-                    )
-                    .map((c) => c.text)
-                    .join('');
+          const model = this._createModel(modelName, { streaming: true });
+          const messages = [new SystemMessage(systemPrompt), new HumanMessage(userPrompt)];
 
-            if (tokenContent) {
-              rawAnswer += tokenContent;
-              yield { type: 'token', content: tokenContent };
+          try {
+            const stream = await model.stream(messages);
+            for await (const chunk of stream) {
+              const tokenContent =
+                typeof chunk.content === 'string'
+                  ? chunk.content
+                  : (chunk.content as unknown[])
+                      .filter(
+                        (c: unknown): c is { type: 'text'; text: string } =>
+                          typeof c === 'object' &&
+                          c !== null &&
+                          'type' in c &&
+                          (c as Record<string, unknown>).type === 'text',
+                      )
+                      .map((c) => c.text)
+                      .join('');
+
+              if (tokenContent) {
+                rawAnswer += tokenContent;
+                yield { type: 'token', content: tokenContent };
+              }
+            }
+            ProviderHealthTracker.reportSuccess();
+            streamSuccess = true;
+            break;
+          } catch (err) {
+            msgError = err instanceof Error ? err.message : String(err);
+            this.logger.error(`[orchestrator:stream] Gemini stream failed for ${modelName}`, {
+              error: msgError,
+            });
+
+            const status =
+              typeof err === 'object' && err !== null && 'status' in err
+                ? Number((err as Record<string, unknown>).status)
+                : undefined;
+
+            globalModelRouter.reportFailure(modelName, status);
+            lastError = err as Error;
+
+            if (status === 429) {
+              ProviderHealthTracker.reportError(new ProviderQuotaExceededError(msgError, 429));
+            } else if (status !== undefined && status >= 500) {
+              ProviderHealthTracker.reportError(new ProviderTransientError(msgError, status));
+            } else {
+              break; // non-retriable error
+            }
+
+            // If we already started streaming tokens, we can't easily retry the stream.
+            if (rawAnswer.length > 0) {
+              this.logger.warn(
+                '[orchestrator:stream] Stream failed mid-flight, cannot retry seamlessly.',
+              );
+              break;
             }
           }
-          ProviderHealthTracker.reportSuccess();
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.logger.error('[orchestrator:stream] Gemini stream failed', { error: msg });
+        }
 
-          const status =
-            typeof err === 'object' && err !== null && 'status' in err
-              ? Number((err as Record<string, unknown>).status)
-              : undefined;
-
+        if (!streamSuccess) {
           let code = 'provider_failure';
-          if (status === 429) {
-            code = 'insufficient_quota';
-            ProviderHealthTracker.reportError(new ProviderQuotaExceededError(msg, 429));
-          } else if (status !== undefined && status >= 500) {
-            code = 'transient_provider_failure';
-            ProviderHealthTracker.reportError(new ProviderTransientError(msg, status));
-          }
+          const status =
+            lastError && 'status' in lastError
+              ? Number((lastError as Record<string, unknown>).status)
+              : undefined;
+          if (status === 429) code = 'insufficient_quota';
+          else if (status !== undefined && status >= 500) code = 'transient_provider_failure';
 
           yield {
             type: 'error',

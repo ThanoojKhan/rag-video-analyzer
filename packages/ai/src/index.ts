@@ -9,6 +9,7 @@ export {
   generateDeterministicMockVector,
 } from './embedding-service.js';
 export { RetrievalEvaluator } from './retrieval-evaluator.js';
+export * from './model-router.js';
 export { RAGOrchestrator, type OrchestratorLogger } from './rag-orchestrator.js';
 export { ConversationMemoryStore, conversationStore } from './memory-store.js';
 export { buildSystemPrompt, buildUserPrompt, buildNoContextResponse } from './prompts.js';
