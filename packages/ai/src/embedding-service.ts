@@ -2,7 +2,12 @@ import { prisma } from '@rag/db';
 import { ProviderHealthTracker, ProviderTransientError } from '@rag/shared';
 import { EmbeddingStatus } from '@prisma/client';
 
-import { pipeline, type FeatureExtractionPipeline } from '@xenova/transformers';
+import { pipeline, type FeatureExtractionPipeline, env } from '@xenova/transformers';
+
+// Configure transformers cache location globally
+if (process.env.TRANSFORMERS_CACHE) {
+  env.cacheDir = process.env.TRANSFORMERS_CACHE;
+}
 
 export interface EmbeddingLogger {
   info(msg: string, meta?: unknown): void;

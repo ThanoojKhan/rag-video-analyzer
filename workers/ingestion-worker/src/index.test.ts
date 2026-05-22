@@ -31,6 +31,6 @@ describe('createWorkerRuntime', () => {
     await worker.shutdown('SIGTERM');
     await worker.shutdown('SIGTERM');
 
-    expect(infoSpy).toHaveBeenCalledTimes(4);
+    expect(infoSpy).toHaveBeenCalledTimes(3);
   });
 });

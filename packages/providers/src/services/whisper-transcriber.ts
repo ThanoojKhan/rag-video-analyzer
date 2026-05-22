@@ -1,4 +1,9 @@
-import { pipeline } from '@xenova/transformers';
+import { pipeline, env } from '@xenova/transformers';
+
+// Configure transformers cache location globally
+if (process.env.TRANSFORMERS_CACHE) {
+  env.cacheDir = process.env.TRANSFORMERS_CACHE;
+}
 
 export interface WhisperSegment {
   start: number;

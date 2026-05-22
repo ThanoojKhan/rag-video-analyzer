@@ -17,7 +17,6 @@
     "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "migrate:status": "dotenv -e ../../.env -- prisma migrate status",
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
-    "pretest": "pnpm prisma:generate",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
