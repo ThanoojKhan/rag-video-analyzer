@@ -133,7 +133,7 @@ export class TranscriptPipeline {
       .map((seg, index) => {
         const start = seg.start;
         const end = seg.end;
-        const text = seg.text ?? seg.content ?? '';
+        const text = seg.text || seg.content || '';
         return {
           sequenceIndex: index,
           startSeconds: typeof start === 'number' ? start : parseFloat(String(start)) || 0,

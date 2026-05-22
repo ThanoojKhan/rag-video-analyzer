@@ -18,32 +18,32 @@ describe('TranscriptPipeline', () => {
         startSeconds: 0,
         endSeconds: 5,
         text: 'Hello world',
-        sourceType: 'extracted',
+        sourceType: 'EXTRACTED',
       });
       expect(normalized[1]).toEqual({
         sequenceIndex: 1,
         startSeconds: 10.5,
         endSeconds: 15.2,
         text: 'Second segment',
-        sourceType: 'extracted',
+        sourceType: 'EXTRACTED',
       });
       expect(normalized[2]).toEqual({
         sequenceIndex: 2,
         startSeconds: 20,
         endSeconds: 25,
         text: 'Third segment',
-        sourceType: 'extracted',
+        sourceType: 'EXTRACTED',
       });
     });
 
     it('should set sourceType correctly', () => {
       const rawSegments = [{ start: 0, end: 5, text: 'Hello' }];
 
-      const native = TranscriptPipeline.normalizeSegments(rawSegments, 'native');
-      expect(native[0].sourceType).toBe('native');
+      const native = TranscriptPipeline.normalizeSegments(rawSegments, 'NATIVE');
+      expect(native[0].sourceType).toBe('NATIVE');
 
-      const generated = TranscriptPipeline.normalizeSegments(rawSegments, 'generated');
-      expect(generated[0].sourceType).toBe('generated');
+      const generated = TranscriptPipeline.normalizeSegments(rawSegments, 'GENERATED');
+      expect(generated[0].sourceType).toBe('GENERATED');
     });
 
     it('should filter out empty segments', () => {

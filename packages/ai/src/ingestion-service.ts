@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { Video, IngestionJob } from '@prisma/client';
 import { prisma } from '@rag/db';
-import { URLValidator, URLValidationError, ProviderRegistry } from '@rag/providers';
+import { URLValidator, URLValidationError, ProviderRegistry, ProviderMode } from '@rag/providers';
 import { TranscriptPipeline } from './transcript-pipeline.js';
+import { ChunkingService } from './chunking-service.js';
 
 export enum IngestionErrorCode {
   INVALID_URL = 'INVALID_URL',
@@ -23,9 +25,7 @@ export class IngestionError extends Error {
 }
 
 interface IngestionOptions {
-  /** If true, update metadata even if video exists */
   refreshMetadata?: boolean;
-  /** Skip transcript acquisition */
   skipTranscript?: boolean;
 }
 
@@ -36,7 +36,6 @@ interface Logger {
   debug(msg: string, meta?: unknown): void;
 }
 
-// No-op logger for when logging is not provided
 const noOpLogger: Logger = {
   info: () => {},
   warn: () => {},
@@ -44,24 +43,13 @@ const noOpLogger: Logger = {
   debug: () => {},
 };
 
-interface IngestResult {
-  video: unknown;
-  ingestionJob?: unknown;
+export interface IngestResult {
+  video: Video;
+  ingestionJob?: IngestionJob;
   isNew: boolean;
   durationMs: number;
 }
 
-/**
- * Video ingestion service.
- *
- * Responsibilities:
- * - Validate and normalize URLs
- * - Detect providers
- * - Fetch metadata and transcripts
- * - Persist entities
- * - Track ingestion lifecycle
- * - Support idempotent operations
- */
 export class IngestionService {
   private transcriptPipeline = new TranscriptPipeline();
   private logger: Logger;
@@ -86,21 +74,13 @@ export class IngestionService {
       options,
     });
 
-    // Step 1: Validate and normalize URL
     let canonicalUrl: string;
     let providerName: string;
 
     try {
-      this.logger.debug('Validating and normalizing URL', { requestId });
       const normalized = URLValidator.normalize(url);
       canonicalUrl = normalized.canonicalUrl;
       providerName = normalized.provider;
-
-      this.logger.info('URL normalized successfully', {
-        requestId,
-        provider: providerName,
-        canonicalUrl,
-      });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.logger.warn('URL validation failed', {
@@ -115,18 +95,12 @@ export class IngestionService {
       throw new IngestionError(IngestionErrorCode.UNSUPPORTED_PROVIDER, 'Failed to validate URL');
     }
 
-    // Step 2: Check if video already exists (idempotency)
-    this.logger.debug('Checking for existing video', {
-      requestId,
-      canonicalUrl,
-    });
-
     const existingVideo = await prisma.video.findUnique({
       where: { canonicalUrl },
       include: { transcriptSegments: true },
     });
 
-    if (existingVideo && !options.refreshMetadata) {
+    if (existingVideo && !options.refreshMetadata && existingVideo.ingestionStatus !== 'FAILED') {
       this.logger.info('Video already exists - returning cached result', {
         requestId,
         videoId: existingVideo.id,
@@ -141,17 +115,8 @@ export class IngestionService {
     }
 
     if (existingVideo) {
-      this.logger.info('Video exists - refreshing metadata', {
-        requestId,
-        videoId: existingVideo.id,
-      });
+      this.logger.info('Video exists - refreshing metadata', { videoId: existingVideo.id });
     }
-
-    // Step 3: Get provider adapter
-    this.logger.debug('Detecting provider adapter', {
-      requestId,
-      provider: providerName,
-    });
 
     const provider = ProviderRegistry.detectProvider(url);
     if (!provider) {
@@ -179,13 +144,6 @@ export class IngestionService {
       );
     }
 
-    this.logger.info('Provider detected and video ID extracted', {
-      requestId,
-      provider: providerName,
-      videoId,
-    });
-
-    // Step 4: Create or update ingestion job
     let ingestionJob = await prisma.ingestionJob.create({
       data: {
         provider: providerName,
@@ -212,8 +170,7 @@ export class IngestionService {
     });
 
     try {
-      // Step 5: Fetch metadata
-      let metadata;
+      let metadataResult;
       try {
         this.logger.debug('Fetching metadata', {
           requestId,
@@ -221,14 +178,14 @@ export class IngestionService {
           provider: providerName,
         });
 
-        metadata = await provider.fetchMetadata(videoId);
+        metadataResult = await provider.fetchMetadata(videoId);
 
         this.logger.info('Metadata fetched successfully', {
           requestId,
           videoId,
-          title: metadata.title,
-          duration: metadata.durationSeconds,
-          views: metadata.views,
+          title: metadataResult.metadata.title,
+          duration: metadataResult.metadata.durationSeconds,
+          views: metadataResult.metadata.views,
         });
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -244,17 +201,14 @@ export class IngestionService {
         );
       }
 
-      // Step 6: Fetch transcript (unless skipped)
+      const metadata = metadataResult.metadata;
+
       let transcript = null;
       if (!options.skipTranscript) {
         try {
-          this.logger.debug('Acquiring transcript', {
-            requestId,
-            videoId,
-            provider: providerName,
-          });
-
-          transcript = await this.transcriptPipeline.acquire(providerName, videoId);
+          const hasGoogle = Boolean(process.env.GOOGLE_API_KEY);
+          const mode = hasGoogle ? ProviderMode.REAL : ProviderMode.MOCK;
+          transcript = await provider.fetchTranscript(videoId, { mode });
 
           if (transcript) {
             this.logger.info('Transcript acquired successfully', {
@@ -285,25 +239,10 @@ export class IngestionService {
         });
       }
 
-      // Step 7: Calculate engagement rate
       const engagementRate = this.calculateEngagementRate({
         likes: metadata.likes,
         comments: metadata.comments,
         views: metadata.views,
-      });
-
-      this.logger.debug('Engagement rate calculated', {
-        requestId,
-        videoId,
-        engagementRate,
-      });
-
-      // Step 8: Update or create video
-      this.logger.debug('Persisting video data', {
-        requestId,
-        videoId,
-        isUpdate: !!existingVideo,
-        refreshMetadata: options.refreshMetadata,
       });
 
       const updatedVideo = await prisma.video.upsert({
@@ -316,7 +255,7 @@ export class IngestionService {
           description: metadata.description,
           creatorName: metadata.creatorName,
           creatorHandle: metadata.creatorHandle,
-          followerCount: metadata.followerCount,
+          followerCount: metadata.followerCount ?? 0,
           views: metadata.views,
           likes: metadata.likes,
           comments: metadata.comments,
@@ -328,24 +267,25 @@ export class IngestionService {
           ingestionStatus: 'PROCESSING',
           lastIngestedAt: new Date(),
         },
-        update: options.refreshMetadata
-          ? {
-              title: metadata.title,
-              description: metadata.description,
-              creatorName: metadata.creatorName,
-              creatorHandle: metadata.creatorHandle,
-              followerCount: metadata.followerCount,
-              views: metadata.views,
-              likes: metadata.likes,
-              comments: metadata.comments,
-              engagementRate,
-              durationSeconds: metadata.durationSeconds,
-              hashtags: metadata.hashtags,
-              thumbnailUrl: metadata.thumbnailUrl,
-              uploadDate: metadata.uploadDate,
-              lastIngestedAt: new Date(),
-            }
-          : { lastIngestedAt: new Date() },
+        update:
+          options.refreshMetadata || !existingVideo
+            ? {
+                title: metadata.title,
+                description: metadata.description,
+                creatorName: metadata.creatorName,
+                creatorHandle: metadata.creatorHandle,
+                followerCount: metadata.followerCount ?? 0,
+                views: metadata.views,
+                likes: metadata.likes,
+                comments: metadata.comments,
+                engagementRate,
+                durationSeconds: metadata.durationSeconds,
+                hashtags: metadata.hashtags,
+                thumbnailUrl: metadata.thumbnailUrl,
+                uploadDate: metadata.uploadDate,
+                lastIngestedAt: new Date(),
+              }
+            : { lastIngestedAt: new Date() },
       });
 
       this.logger.info('Video persisted to database', {
@@ -354,20 +294,11 @@ export class IngestionService {
         isNew: !existingVideo,
       });
 
-      // Step 9: Persist transcript segments if available
       if (transcript && transcript.segments.length > 0) {
-        this.logger.debug('Persisting transcript segments', {
-          requestId,
-          videoId: updatedVideo.id,
-          segmentCount: transcript.segments.length,
-        });
-
-        // Clear existing transcript segments
         await prisma.transcriptSegment.deleteMany({
           where: { videoId: updatedVideo.id },
         });
 
-        // Insert new segments
         await prisma.transcriptSegment.createMany({
           data: transcript.segments.map(
             (seg: {
@@ -392,9 +323,40 @@ export class IngestionService {
           videoId: updatedVideo.id,
           segmentCount: transcript.segments.length,
         });
+
+        await ChunkingService.createChunksForVideo(updatedVideo.id, ingestionJob.id);
+        this.logger.info('Transcript chunks generated', {
+          videoId: updatedVideo.id,
+          segments: transcript.segments.length,
+        });
+      } else {
+        this.logger.info(
+          'No transcript available, skipping chunking and marking embedding as complete',
+          {
+            requestId,
+            videoId: updatedVideo.id,
+          },
+        );
+        await prisma.videoEmbeddingState.upsert({
+          where: { videoId: updatedVideo.id },
+          update: {
+            ingestionJobId: ingestionJob.id,
+            status: 'COMPLETED',
+            model: 'Xenova/bge-small-en-v1.5',
+            chunkCount: 0,
+            errorMessage: 'No transcript available',
+          },
+          create: {
+            videoId: updatedVideo.id,
+            ingestionJobId: ingestionJob.id,
+            status: 'COMPLETED',
+            model: 'Xenova/bge-small-en-v1.5',
+            chunkCount: 0,
+            errorMessage: 'No transcript available',
+          },
+        });
       }
 
-      // Step 10: Mark ingestion job as completed
       ingestionJob = await prisma.ingestionJob.update({
         where: { id: ingestionJob.id },
         data: {
@@ -409,7 +371,6 @@ export class IngestionService {
         duration: Date.now() - startTime,
       });
 
-      // Step 11: Mark video as completed
       const finalVideo = await prisma.video.update({
         where: { id: updatedVideo.id },
         data: { ingestionStatus: 'COMPLETED' },
@@ -433,7 +394,6 @@ export class IngestionService {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
-      // Mark ingestion job as failed
       await prisma.ingestionJob.update({
         where: { id: ingestionJob.id },
         data: {
@@ -450,11 +410,13 @@ export class IngestionService {
         duration: Date.now() - startTime,
       });
 
-      // Update video status to failed
       if (ingestionJob.videoId) {
         await prisma.video.update({
           where: { id: ingestionJob.videoId },
-          data: { ingestionStatus: 'FAILED' },
+          data: {
+            ingestionStatus: 'FAILED',
+            title: existingVideo ? undefined : 'Failed Ingestion',
+          },
         });
       }
 
@@ -474,7 +436,6 @@ export class IngestionService {
       throw new IngestionError(IngestionErrorCode.DATABASE_ERROR, 'Video not found');
     }
 
-    // Check if already retried too many times
     const failedJobs = await prisma.ingestionJob.count({
       where: {
         videoId,
@@ -489,15 +450,11 @@ export class IngestionService {
       );
     }
 
-    // Retry with canonical URL
     return this.ingestFromUrl(video.canonicalUrl, {
       refreshMetadata: true,
     });
   }
 
-  /**
-   * Calculate engagement rate from views, likes, comments.
-   */
   private generateRequestId(): string {
     return randomUUID();
   }
