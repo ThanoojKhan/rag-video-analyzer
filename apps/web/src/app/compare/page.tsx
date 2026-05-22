@@ -28,7 +28,7 @@ export default function ComparePage(): JSX.Element {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const { messages, isLoading, error, sendMessage } = useChat({
+  const { messages, isLoading, error, sendMessage, clearMessages, retry } = useChat({
     videoIds: isReady ? [videoAId, videoBId] : [],
     analysisType: 'comparative',
   });
@@ -53,6 +53,7 @@ export default function ComparePage(): JSX.Element {
   const handleLoadVideos = async (): Promise<void> => {
     if (!videoAId || !videoBId) return;
     setIsIngesting(true);
+    clearMessages();
     try {
       const idA = await resolveVideoId(videoAId);
       const idB = await resolveVideoId(videoBId);
@@ -138,18 +139,17 @@ export default function ComparePage(): JSX.Element {
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-6 py-4 flex-none sticky top-0 z-10">
         <h1 className="text-xl font-semibold tracking-tight">Creator Intelligence Workspace</h1>
-        <p className="text-sm text-slate-400">Engineered by: Thanooj</p>
       </header>
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Side: Video Previews */}
-        <div className="w-full h-[45vh] md:h-auto md:w-5/12 lg:w-1/3 border-b md:border-b-0 md:border-r border-slate-800 bg-slate-950/50 overflow-y-auto p-6 flex flex-col gap-6 shrink-0">
+        <div className="w-full h-[45vh] md:h-auto md:w-1/2 xl:w-[45%] border-b md:border-b-0 md:border-r border-slate-800 bg-slate-950/50 overflow-y-auto p-6 flex flex-col gap-6 shrink-0">
           {!isReady ? (
             <div className="space-y-4">
               <h2 className="text-lg font-medium text-slate-200">Load Videos for Comparison</h2>
-              <div className="space-y-4">
-                <div>
+              <div className="flex flex-col xl:flex-row gap-6">
+                <div className="flex-1">
                   <label className="block text-sm text-slate-400 mb-1">Video A</label>
                   <div className="flex flex-col gap-2">
                     <select
@@ -186,7 +186,9 @@ export default function ComparePage(): JSX.Element {
                   </div>
                 </div>
 
-                <div>
+                <div className="hidden xl:block w-px bg-slate-800" />
+
+                <div className="flex-1">
                   <label className="block text-sm text-slate-400 mb-1">Video B</label>
                   <div className="flex flex-col gap-2">
                     <select
@@ -228,57 +230,64 @@ export default function ComparePage(): JSX.Element {
               </Button>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-6 flex flex-col h-full">
               <div className="flex justify-between items-center">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
                   Comparative Context
                 </h2>
                 <button
-                  onClick={() => setIsReady(false)}
+                  onClick={() => {
+                    setIsReady(false);
+                    clearMessages();
+                  }}
                   className="text-xs text-sky-400 hover:text-sky-300"
                 >
                   Change Videos
                 </button>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-sky-500 uppercase tracking-widest">
-                    Video A
-                  </span>
+              <div className="flex flex-col xl:flex-row gap-6">
+                <div className="flex-1 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-sky-500 uppercase tracking-widest">
+                      Video A
+                    </span>
+                    {videoAProgress !== null && videoAProgress < 100 && (
+                      <span className="text-xs text-sky-400">Embedding: {videoAProgress}%</span>
+                    )}
+                  </div>
                   {videoAProgress !== null && videoAProgress < 100 && (
-                    <span className="text-xs text-sky-400">Embedding: {videoAProgress}%</span>
+                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-sky-500 h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: `${videoAProgress}%` }}
+                      />
+                    </div>
                   )}
+                  {videoA && <VideoMetadataPreview {...videoA} />}
                 </div>
-                {videoAProgress !== null && videoAProgress < 100 && (
-                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="bg-sky-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${videoAProgress}%` }}
-                    />
-                  </div>
-                )}
-                {videoA && <VideoMetadataPreview {...videoA} />}
-              </div>
 
-              <div className="space-y-2 pt-4 border-t border-slate-800">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-sky-500 uppercase tracking-widest">
-                    Video B
-                  </span>
-                  {videoBProgress !== null && videoBProgress < 100 && (
-                    <span className="text-xs text-sky-400">Embedding: {videoBProgress}%</span>
-                  )}
-                </div>
-                {videoBProgress !== null && videoBProgress < 100 && (
-                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="bg-sky-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${videoBProgress}%` }}
-                    />
+                <div className="hidden xl:block w-px bg-slate-800" />
+
+                <div className="flex-1 space-y-2 pt-4 xl:pt-0 border-t xl:border-t-0 border-slate-800">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-sky-500 uppercase tracking-widest">
+                      Video B
+                    </span>
+                    {videoBProgress !== null && videoBProgress < 100 && (
+                      <span className="text-xs text-sky-400">Embedding: {videoBProgress}%</span>
+                    )}
                   </div>
-                )}
-                {videoB && <VideoMetadataPreview {...videoB} />}
+                  {videoBProgress !== null && videoBProgress < 100 && (
+                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-sky-500 h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: `${videoBProgress}%` }}
+                      />
+                    </div>
+                  )}
+                  {videoB && <VideoMetadataPreview {...videoB} />}
+                </div>
               </div>
             </div>
           )}
@@ -321,6 +330,22 @@ export default function ComparePage(): JSX.Element {
                 <div className="flex flex-wrap justify-center gap-2 pt-4">
                   <button
                     onClick={() => {
+                      setInput('Why did Video A get more engagement than Video B?');
+                    }}
+                    className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full transition-colors border border-slate-700"
+                  >
+                    Why did A get more engagement?
+                  </button>
+                  <button
+                    onClick={() => {
+                      setInput("What's the engagement rate of each?");
+                    }}
+                    className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full transition-colors border border-slate-700"
+                  >
+                    Engagement rates
+                  </button>
+                  <button
+                    onClick={() => {
                       setInput('Compare the hooks in the first 5 seconds.');
                     }}
                     className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full transition-colors border border-slate-700"
@@ -329,19 +354,19 @@ export default function ComparePage(): JSX.Element {
                   </button>
                   <button
                     onClick={() => {
-                      setInput('Which video used stronger emotional engagement?');
+                      setInput("Who's the creator of Video B and what's their follower count?");
                     }}
                     className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full transition-colors border border-slate-700"
                   >
-                    Emotional engagement
+                    Creator of Video B
                   </button>
                   <button
                     onClick={() => {
-                      setInput('Compare the CTA strategies.');
+                      setInput('Suggest improvements for B based on what worked in A.');
                     }}
                     className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full transition-colors border border-slate-700"
                   >
-                    CTA strategies
+                    Suggest improvements for B
                   </button>
                 </div>
               </div>
@@ -351,7 +376,6 @@ export default function ComparePage(): JSX.Element {
                   <ChatMessage key={msg.turnId} message={msg} />
                 ))}
 
-                {/* Error Banner */}
                 {error && (
                   <div className="mb-6 p-4 rounded-lg bg-red-900/30 border border-red-800/50 flex gap-3 text-red-200 text-sm shadow-md">
                     <svg
@@ -367,40 +391,27 @@ export default function ComparePage(): JSX.Element {
                         d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                       />
                     </svg>
-                    <div>
+                    <div className="flex-1">
                       <p className="font-medium text-red-400 mb-1">Provider Degradation Detected</p>
-                      <p>{error}</p>
+                      <p className="mb-2">{error}</p>
+                      <button
+                        onClick={retry}
+                        className="text-xs px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded border border-red-500/30 transition-colors"
+                      >
+                        Retry Analysis
+                      </button>
                     </div>
                   </div>
                 )}
 
-                {/* Typing Indicator */}
-                {isLoading && messages.length % 2 !== 0 && (
-                  <div className="flex justify-start mb-6">
-                    <div className="bg-slate-800 px-5 py-4 rounded-2xl rounded-bl-sm flex gap-1.5 items-center">
-                      <div
-                        className="w-2 h-2 rounded-full bg-slate-500 animate-bounce"
-                        style={{ animationDelay: '0ms' }}
-                      />
-                      <div
-                        className="w-2 h-2 rounded-full bg-slate-500 animate-bounce"
-                        style={{ animationDelay: '150ms' }}
-                      />
-                      <div
-                        className="w-2 h-2 rounded-full bg-slate-500 animate-bounce"
-                        style={{ animationDelay: '300ms' }}
-                      />
-                    </div>
-                  </div>
-                )}
                 <div ref={messagesEndRef} />
               </div>
             )}
           </div>
 
           {/* Input Area */}
-          <div className="p-4 bg-slate-900 border-t border-slate-800">
-            <div className="max-w-3xl mx-auto">
+          <div className="p-4 pb-2 bg-slate-900 border-t border-slate-800 flex flex-col items-center">
+            <div className="max-w-3xl mx-auto w-full mb-2">
               <form onSubmit={handleSend} className="relative flex items-center">
                 <textarea
                   value={input}
@@ -433,12 +444,11 @@ export default function ComparePage(): JSX.Element {
                   </svg>
                 </button>
               </form>
-              <div className="text-center mt-2">
-                <span className="text-[10px] text-slate-500">
-                  AI-generated responses may be inaccurate. Grounded by retrieved context.
-                </span>
-              </div>
             </div>
+            <span className="text-[10px] text-slate-500 text-center">
+              Responses are AI-generated and may contain inaccuracies. Grounded with retrieved
+              context. © 2026 Thanooj.
+            </span>
           </div>
         </div>
       </main>

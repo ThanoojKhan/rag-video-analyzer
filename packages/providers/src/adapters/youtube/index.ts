@@ -103,11 +103,27 @@ export class YouTubeProvider implements IVideoProvider {
 
     try {
       const url = `https://www.youtube.com/watch?v=${videoId}`;
+
+      interface YtDlpInfo {
+        title?: string;
+        description?: string;
+        uploader?: string;
+        uploader_id?: string;
+        channel_follower_count?: number;
+        view_count?: number;
+        like_count?: number;
+        comment_count?: number;
+        duration?: number;
+        tags?: string[];
+        thumbnail?: string;
+        upload_date?: string;
+      }
+
       const info = (await ytDlp(url, {
         dumpSingleJson: true,
         noWarnings: true,
         noCheckCertificate: true,
-      })) as Record<string, unknown>;
+      })) as YtDlpInfo;
 
       const views = info.view_count || 0;
       const likes = info.like_count || 0;

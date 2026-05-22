@@ -74,70 +74,139 @@ export function VideoMetadataPreview({
 
       {/* Creator info */}
       {(creatorName || creatorHandle) && (
-        <div className="flex items-center space-x-2">
-          <span className="text-slate-400 text-sm">by</span>
-          <span className="text-slate-200 font-semibold">{creatorName || creatorHandle}</span>
-          {creatorHandle && <span className="text-slate-500 text-sm">@{creatorHandle}</span>}
+        <div className="flex items-center flex-wrap gap-2 text-sm mt-1 mb-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400">by</span>
+            <span className="text-slate-200 font-semibold">{creatorName || creatorHandle}</span>
+            {creatorHandle && creatorHandle !== creatorName && (
+              <span className="text-slate-500 bg-slate-800/50 px-1.5 py-0.5 rounded-md text-xs font-mono">
+                {creatorHandle.startsWith('@') ? creatorHandle : `@${creatorHandle}`}
+              </span>
+            )}
+          </div>
           {followerCount != null && (
-            <span className="text-sky-400 text-xs ml-2 px-1.5 py-0.5 bg-sky-900/30 rounded">
-              {formatNumber(followerCount)} followers
-            </span>
+            <>
+              <span className="text-slate-600">•</span>
+              <span className="text-sky-400 text-xs px-2 py-0.5 bg-sky-900/30 border border-sky-800/50 rounded-full font-medium">
+                {formatNumber(followerCount)} followers
+              </span>
+            </>
           )}
         </div>
       )}
 
+      {/* Stats Row */}
+      <div className="flex flex-wrap items-center gap-6 py-3 border-y border-slate-800/60 bg-slate-900/30 rounded-lg px-4 -mx-2 my-3 justify-between md:justify-start md:gap-8">
+        <div className="flex items-center gap-2 text-slate-300" title="Views">
+          <svg
+            className="w-4 h-4 text-slate-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+            />
+          </svg>
+          <span className="font-medium text-sm tracking-wide">{formatNumber(views)}</span>
+        </div>
+        <div className="flex items-center gap-2 text-slate-300" title="Likes">
+          <svg
+            className="w-4 h-4 text-slate-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+            />
+          </svg>
+          <span className="font-medium text-sm tracking-wide">{formatNumber(likes)}</span>
+        </div>
+        <div className="flex items-center gap-2 text-slate-300" title="Comments">
+          <svg
+            className="w-4 h-4 text-slate-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+            />
+          </svg>
+          <span className="font-medium text-sm tracking-wide">{formatNumber(comments)}</span>
+        </div>
+        <div className="flex items-center gap-2 text-slate-300" title="Engagement Rate">
+          <svg
+            className="w-4 h-4 text-sky-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+            />
+          </svg>
+          <span className="font-medium text-sm text-sky-400">
+            {views > 0 ? (((likes + comments) / views) * 100).toFixed(2) : '0.00'}%
+          </span>
+        </div>
+      </div>
+
       {/* Description */}
       {description && <p className="text-slate-300 text-sm line-clamp-3">{description}</p>}
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-slate-800 rounded p-3">
-          <p className="text-slate-400 text-xs uppercase tracking-wide">Views</p>
-          <p className="text-slate-100 font-semibold text-lg">{formatNumber(views)}</p>
-        </div>
-
-        <div className="bg-slate-800 rounded p-3">
-          <p className="text-slate-400 text-xs uppercase tracking-wide">Likes</p>
-          <p className="text-slate-100 font-semibold text-lg">{formatNumber(likes)}</p>
-        </div>
-
-        <div className="bg-slate-800 rounded p-3">
-          <p className="text-slate-400 text-xs uppercase tracking-wide">Comments</p>
-          <p className="text-slate-100 font-semibold text-lg">{formatNumber(comments)}</p>
-        </div>
-
-        <div className="bg-slate-800 rounded p-3">
-          <p className="text-slate-400 text-xs uppercase tracking-wide">Engagement</p>
-          <p className="text-slate-100 font-semibold text-lg">
-            {views > 0 ? (((likes + comments) / views) * 100).toFixed(2) : '0.00'}%
+      {/* Details Grid */}
+      <div className="grid grid-cols-2 gap-y-4 gap-x-6 pt-5 border-t border-slate-700/60 mt-4 text-sm">
+        <div>
+          <p className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider mb-1">
+            Duration
           </p>
+          <p className="text-slate-200 font-medium">{formatDuration(durationSeconds)}</p>
         </div>
-      </div>
 
-      {/* Duration */}
-      <div className="flex justify-between items-center text-sm">
-        <span className="text-slate-400">Duration</span>
-        <span className="text-slate-200 font-semibold">{formatDuration(durationSeconds)}</span>
-      </div>
+        {uploadDate && (
+          <div>
+            <p className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider mb-1">
+              Uploaded
+            </p>
+            <p className="text-slate-200 font-medium">
+              {new Date(uploadDate).toLocaleDateString()}
+            </p>
+          </div>
+        )}
 
-      {/* Upload date */}
-      {uploadDate && (
-        <div className="flex justify-between items-center text-sm">
-          <span className="text-slate-400">Uploaded</span>
-          <span className="text-slate-200">{new Date(uploadDate).toLocaleDateString()}</span>
+        <div>
+          <p className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider mb-1">
+            Platform
+          </p>
+          <p className="text-slate-200 font-medium capitalize">{platform}</p>
         </div>
-      )}
 
-      {/* Platform info */}
-      <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-700">
-        <span className="text-slate-400">Platform</span>
-        <span className="text-slate-200 capitalize font-semibold">{platform}</span>
-      </div>
-
-      {/* Platform video id */}
-      <div className="flex justify-between items-center text-sm pt-2">
-        <span className="text-slate-400">Video ID</span>
-        <span className="text-slate-200 font-mono">{platformVideoId}</span>
+        <div>
+          <p className="text-slate-500 text-[11px] font-semibold uppercase tracking-wider mb-1">
+            Video ID
+          </p>
+          <p className="text-slate-200 font-medium font-mono text-xs">{platformVideoId}</p>
+        </div>
       </div>
 
       {/* Hashtags */}

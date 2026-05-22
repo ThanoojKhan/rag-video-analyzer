@@ -13,6 +13,8 @@ export interface UseChatReturn {
   isLoading: boolean;
   error: string | null;
   sendMessage: (content: string) => Promise<void>;
+  clearMessages: () => void;
+  retry: () => void;
 }
 
 export function useChat({
@@ -180,6 +182,15 @@ export function useChat({
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
         setError(err instanceof Error ? err.message : String(err));
+        // Remove the empty assistant message if it failed before generating content
+        setMessages((prev) => {
+          const newMsgs = [...prev];
+          const last = newMsgs[newMsgs.length - 1];
+          if (last && last.role === 'assistant' && last.content === '') {
+            newMsgs.pop();
+          }
+          return newMsgs;
+        });
       } finally {
         setIsLoading(false);
       }
@@ -187,5 +198,49 @@ export function useChat({
     [isLoading, videoIds, analysisType],
   );
 
-  return { messages, isLoading, error, sendMessage };
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setError(null);
+    conversationIdRef.current = initialConversationId;
+  }, [initialConversationId]);
+
+  const retry = useCallback(() => {
+    if (isLoading || messages.length === 0) return;
+
+    // Find the last user message
+    let lastUserMessage = '';
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg && msg.role === 'user') {
+        lastUserMessage = msg.content;
+        break;
+      }
+    }
+
+    if (!lastUserMessage) return;
+
+    // Pop the last assistant message and user message so we don't duplicate them in the UI when sending again
+    setMessages((prev) => {
+      const msgs = [...prev];
+      while (msgs.length > 0) {
+        const last = msgs[msgs.length - 1];
+        if (last && last.role === 'assistant') {
+          msgs.pop();
+        } else {
+          break;
+        }
+      }
+      if (msgs.length > 0) {
+        const last = msgs[msgs.length - 1];
+        if (last && last.role === 'user') {
+          msgs.pop();
+        }
+      }
+      return msgs;
+    });
+
+    void sendMessage(lastUserMessage);
+  }, [isLoading, messages, sendMessage]);
+
+  return { messages, isLoading, error, sendMessage, clearMessages, retry };
 }
