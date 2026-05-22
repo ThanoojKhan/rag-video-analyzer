@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@rag/ai": "workspace:*",
+    "@rag/db": "workspace:*",
     "@rag/shared": "workspace:^",
     "dotenv": "^16.4.3",
     "pino": "^8.18.0"

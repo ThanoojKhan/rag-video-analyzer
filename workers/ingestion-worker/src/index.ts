@@ -2,6 +2,8 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
 import { pino, type Logger } from 'pino';
 import { workerEnvSchema, type WorkerEnv } from '@rag/shared';
+import { EmbeddingService } from '@rag/ai';
+import { prisma } from '@rag/db';
 
 config({ path: fileURLToPath(new URL('../../../.env', import.meta.url)) });
 
@@ -23,17 +25,71 @@ export function getWorkerEnv(source: NodeJS.ProcessEnv = process.env): WorkerEnv
 
 export function createWorkerRuntime(env: WorkerEnv, logger: Logger): WorkerRuntime {
   let isShuttingDown = false;
+  let timerId: NodeJS.Timeout | null = null;
+  const pollIntervalMs = 5000;
+
+  const embeddingLogger = {
+    info: (msg: string, meta?: unknown) => logger.info({ meta }, msg),
+    warn: (msg: string, meta?: unknown) => logger.warn({ meta }, msg),
+    error: (msg: string, meta?: unknown) => logger.error({ meta }, msg),
+    debug: (msg: string, meta?: unknown) => logger.debug({ meta }, msg),
+  };
+
+  const embeddingService = new EmbeddingService(embeddingLogger);
+
+  async function poll(): Promise<void> {
+    if (isShuttingDown) {
+      return;
+    }
+    try {
+      const pendingJobs = await prisma.videoEmbeddingState.findMany({
+        where: { status: 'PENDING' },
+        select: { videoId: true },
+      });
+
+      if (pendingJobs.length > 0) {
+        logger.info(`Worker found ${pendingJobs.length} pending embedding jobs to process`);
+      }
+
+      for (const job of pendingJobs) {
+        if (isShuttingDown) {
+          break;
+        }
+        try {
+          await embeddingService.processVideoEmbeddings(job.videoId);
+        } catch (err) {
+          logger.error(
+            { videoId: job.videoId, error: err instanceof Error ? err.message : String(err) },
+            'Error processing video embedding in worker',
+          );
+        }
+      }
+    } catch (err) {
+      logger.error(
+        { error: err instanceof Error ? err.message : String(err) },
+        'Error polling database in ingestion worker',
+      );
+    } finally {
+      if (!isShuttingDown) {
+        timerId = setTimeout(() => void poll(), pollIntervalMs);
+      }
+    }
+  }
 
   return {
     async start(): Promise<void> {
+      const hasGoogle = Boolean(process.env.GOOGLE_API_KEY);
       logger.info(
         {
+          llmProvider: hasGoogle ? 'gemini' : 'mock',
+          embeddingModel: 'Xenova/bge-small-en-v1.5',
+          mockMode: !hasGoogle,
           nodeEnv: env.NODE_ENV,
-          pid: process.pid,
-          uptimeSeconds: Math.round(process.uptime()),
         },
-        'Ingestion worker initialized',
+        'Ingestion worker started',
       );
+
+      timerId = setTimeout(() => void poll(), pollIntervalMs);
     },
 
     async shutdown(signal: NodeJS.Signals): Promise<void> {
@@ -48,6 +104,21 @@ export function createWorkerRuntime(env: WorkerEnv, logger: Logger): WorkerRunti
         },
         'Ingestion worker shutting down',
       );
+
+      if (timerId) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
+
+      try {
+        await prisma.$disconnect();
+        logger.info('Database client disconnected');
+      } catch (err) {
+        logger.error(
+          { error: err instanceof Error ? err.message : String(err) },
+          'Error disconnecting Database client during shutdown',
+        );
+      }
     },
   };
 }

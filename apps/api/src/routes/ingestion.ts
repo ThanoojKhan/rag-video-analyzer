@@ -147,6 +147,28 @@ export async function ingestionRoutes(app: FastifyInstance): Promise<void> {
   );
 
   /**
+   * GET /api/v1/videos
+   * Get all videos, ordered by most recent.
+   */
+  app.get('/api/v1/videos', async (request, reply) => {
+    const requestId = String(request.id);
+    try {
+      const videos = await prisma.video.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+      const validated = z.array(videoResponseSchema).parse(videos);
+      return reply.send(validated);
+    } catch (error) {
+      app.log.error(error instanceof Error ? error : String(error));
+      return reply.code(500).send({
+        error: 'Internal server error',
+        requestId,
+      });
+    }
+  });
+
+  /**
    * GET /api/v1/videos/:id
    * Get video by ID.
    */
@@ -286,6 +308,69 @@ export async function ingestionRoutes(app: FastifyInstance): Promise<void> {
 
         const response = ingestionJobSchema.parse(job);
         return reply.send(response);
+      } catch (error) {
+        app.log.error(error instanceof Error ? error : String(error));
+        return reply.code(500).send({
+          error: 'Internal server error',
+          requestId,
+        });
+      }
+    },
+  );
+  /**
+   * GET /api/v1/videos/:id/status
+   * Get the current processing status of a video.
+   */
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/videos/:id/status',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', description: 'Video ID' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const requestId = String(request.id);
+
+      try {
+        const { id } = request.params;
+
+        const video = await prisma.video.findUnique({
+          where: { id },
+          include: { embeddingState: true },
+        });
+
+        if (!video) {
+          return reply.code(404).send({
+            error: 'Video not found',
+            requestId,
+          });
+        }
+
+        const state = video.embeddingState;
+        let progress = 0;
+
+        if (state) {
+          if (state.status === 'COMPLETED') {
+            progress = 100;
+          } else if (state.chunkCount > 0 && state.chunksProcessed > 0) {
+            progress = Math.floor((state.chunksProcessed / state.chunkCount) * 100);
+          }
+        }
+
+        return reply.send({
+          videoId: id,
+          ingestionStatus: video.ingestionStatus,
+          embeddingStatus: state?.status ?? null,
+          chunksProcessed: state?.chunksProcessed ?? null,
+          totalChunks: state?.chunkCount ?? null,
+          overallProgress: progress,
+        });
       } catch (error) {
         app.log.error(error instanceof Error ? error : String(error));
         return reply.code(500).send({

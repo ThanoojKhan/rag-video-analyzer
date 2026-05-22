@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './setup-env.js';
 import { getAppEnv } from './plugins/env.js';
 import { createApp } from './app.js';
 import { prisma, preparePgVector } from '@rag/db';
@@ -14,18 +14,21 @@ let isShuttingDown = false;
 async function start(): Promise<void> {
   try {
     await prisma.$connect();
+    await prisma.$executeRaw`SELECT 1`; // Fail loudly if db connectivity is broken
     await preparePgVector(prisma);
+
+    const hasGoogle = Boolean(process.env.GOOGLE_API_KEY);
+
+    if (process.env.NODE_ENV === 'production' && !hasGoogle) {
+      throw new Error('FATAL: GOOGLE_API_KEY is required in production environment.');
+    }
 
     const port = await listenWithLocalFallback(env.PORT);
     app.log.info(
       {
-        requestedPort: env.PORT,
-        activePort: port,
-        host: env.HOST,
-        nodeEnv: env.NODE_ENV,
-        fallbackEnabled: env.NODE_ENV === 'development' && env.PORT_FALLBACK,
-        pid: process.pid,
-        uptimeSeconds: Math.round(process.uptime()),
+        llmProvider: hasGoogle ? 'gemini' : 'mock',
+        mockMode: !hasGoogle,
+        port,
       },
       'API server started',
     );

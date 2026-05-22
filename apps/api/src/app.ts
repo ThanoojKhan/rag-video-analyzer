@@ -5,6 +5,11 @@ import type { FastifyInstance } from 'fastify';
 import type { AppEnv } from '@rag/shared';
 import { healthRoutes } from './routes/health.js';
 import { ingestionRoutes } from './routes/ingestion.js';
+import { diagnosticsRoutes } from './routes/diagnostics.js';
+import { retrievalRoutes } from './routes/retrieval.js';
+import { evaluationRoutes } from './routes/evaluation.js';
+import { chatRoutes } from './routes/chat.js';
+import { systemRoutes } from './routes/system.js';
 
 export interface AppDependencies {
   disconnectDatabase: () => Promise<void>;
@@ -32,8 +37,9 @@ export async function createApp(
         : randomUUID();
     },
     trustProxy: env.NODE_ENV === 'production',
-    requestTimeout: 30_000,
+    requestTimeout: 120_000,
     bodyLimit: 1_048_576,
+    disableRequestLogging: true,
   });
 
   await app.register(cors, {
@@ -58,15 +64,18 @@ export async function createApp(
     });
   });
 
-  // Ensure any potential promise-returning hooks are intentionally ignored
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  void app.addHook('onSend', (request, reply, payload) => {
+  app.addHook('onSend', async (request, reply, payload) => {
     void reply.header('x-request-id', String(request.id));
     return payload;
   });
 
   await healthRoutes(app);
   await ingestionRoutes(app);
+  await diagnosticsRoutes(app);
+  await retrievalRoutes(app);
+  await evaluationRoutes(app);
+  await chatRoutes(app);
+  await systemRoutes(app);
 
   if (env.NODE_ENV !== 'production') {
     app.log.info({ routes: app.printRoutes() }, 'Registered routes');
