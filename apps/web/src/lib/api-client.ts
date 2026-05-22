@@ -242,6 +242,10 @@ export interface IngestionJob {
   updatedAt: string;
 }
 
+export async function fetchVideos(): Promise<VideoDetails[]> {
+  return fetchWithTimeout<VideoDetails[]>('/api/v1/videos');
+}
+
 export async function ingestVideo(request: IngestVideoRequest): Promise<IngestVideoResponse> {
   return fetchWithTimeout<IngestVideoResponse>('/api/v1/videos/ingest', {
     method: 'POST',
@@ -261,4 +265,12 @@ export async function fetchTranscript(videoId: string): Promise<TranscriptRespon
 
 export async function fetchIngestionJob(jobId: string): Promise<IngestionJob> {
   return fetchWithTimeout<IngestionJob>(`/api/v1/ingestion-jobs/${encodeURIComponent(jobId)}`);
+}
+
+export async function getVideoStatus(
+  videoId: string,
+): Promise<import('@rag/shared').VideoStatusResponse> {
+  return fetchWithTimeout<import('@rag/shared').VideoStatusResponse>(
+    `/api/v1/videos/${encodeURIComponent(videoId)}/status`,
+  );
 }
