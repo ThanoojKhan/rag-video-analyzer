@@ -8,7 +8,9 @@ import {
   ProviderAdapterResult,
   VideoProvider,
 } from '../../types/provider.js';
-import { ProviderFeatureUnsupportedError } from '../../errors.js';
+import { ProviderError } from '../../errors.js';
+import { YoutubeTranscript } from 'youtube-transcript';
+import ytDlp from 'yt-dlp-exec';
 
 /**
  * YouTube video provider adapter.
@@ -99,9 +101,47 @@ export class YouTubeProvider implements IVideoProvider {
       };
     }
 
-    throw new ProviderFeatureUnsupportedError(
-      'YouTube real metadata extraction is not implemented yet.',
-    );
+    try {
+      const url = `https://www.youtube.com/watch?v=${videoId}`;
+      const info = (await ytDlp(url, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        noCheckCertificate: true,
+      })) as Record<string, unknown>;
+
+      const views = info.view_count || 0;
+      const likes = info.like_count || 0;
+      const comments = info.comment_count || 0;
+
+      return {
+        metadata: {
+          platformVideoId: videoId,
+          canonicalUrl: url,
+          title: info.title || 'Unknown Title',
+          description: info.description || null,
+          creatorName: info.uploader || null,
+          creatorHandle: info.uploader_id ? `@${info.uploader_id}` : null,
+          followerCount: info.channel_follower_count || null,
+          views,
+          likes,
+          comments,
+          engagementRate: views > 0 ? ((likes + comments) / views) * 100 : 0,
+          durationSeconds: info.duration || 0,
+          hashtags: info.tags || [],
+          thumbnailUrl: info.thumbnail || null,
+          uploadDate: info.upload_date
+            ? new Date(info.upload_date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'))
+            : null,
+        },
+        sourceAttribution: 'YOUTUBE_NATIVE',
+        confidence: 1,
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      throw new ProviderError(
+        `[YOUTUBE_METADATA_ERROR] Failed to extract YouTube metadata: ${errorMsg}`,
+      );
+    }
   }
 
   async fetchTranscript(
@@ -130,9 +170,40 @@ export class YouTubeProvider implements IVideoProvider {
       };
     }
 
-    throw new ProviderFeatureUnsupportedError(
-      'YouTube real transcript extraction is not implemented yet.',
-    );
+    try {
+      const rawTranscript = await YoutubeTranscript.fetchTranscript(videoId);
+
+      const segments = rawTranscript.map((t, idx) => ({
+        sequenceIndex: idx,
+        startSeconds: t.offset / 1000,
+        endSeconds: (t.offset + t.duration) / 1000,
+        text: t.text,
+        sourceType: 'NATIVE' as const,
+      }));
+
+      const duration = segments.length > 0 ? segments[segments.length - 1]!.endSeconds : 0;
+
+      return {
+        segments,
+        duration,
+        language: 'en',
+        hasNativeTranscript: true,
+        status: 'AVAILABLE',
+        sourceAttribution: 'NATIVE',
+        confidence: 1.0,
+      };
+    } catch (err) {
+      // Fallback if no transcript
+      return {
+        segments: [],
+        duration: 0,
+        language: 'en',
+        hasNativeTranscript: false,
+        status: 'UNAVAILABLE',
+        sourceAttribution: 'NATIVE',
+        confidence: 0,
+      };
+    }
   }
 
   async fetchVideo(videoId: string, options: ProviderOptions = {}): Promise<ProviderAdapterResult> {

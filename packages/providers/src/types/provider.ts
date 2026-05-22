@@ -40,18 +40,18 @@ export interface VideoMetadata {
   platformVideoId: string;
   canonicalUrl: string;
   title: string;
-  description: string;
-  creatorName: string;
-  creatorHandle: string;
-  followerCount: number;
+  description: string | null;
+  creatorName: string | null;
+  creatorHandle: string | null;
+  followerCount: number | null;
   views: number;
   likes: number;
   comments: number;
   engagementRate: number;
   durationSeconds: number;
   hashtags: string[];
-  thumbnailUrl: string;
-  uploadDate: Date;
+  thumbnailUrl: string | null;
+  uploadDate: Date | null;
 }
 
 export interface ProviderMetadataResult {

@@ -14,7 +14,6 @@
   "scripts": {
     "build": "tsc --build",
     "lint": "eslint . --ext .ts",
-    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

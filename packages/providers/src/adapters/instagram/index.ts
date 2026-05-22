@@ -8,7 +8,12 @@ import {
   ProviderAdapterResult,
   VideoProvider,
 } from '../../types/provider.js';
-import { ProviderFeatureUnsupportedError } from '../../errors.js';
+import { ProviderError } from '../../errors.js';
+import ytDlp from 'yt-dlp-exec';
+import { LocalWhisperTranscriber } from '../../services/whisper-transcriber.js';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
 
 /**
  * Instagram video provider adapter.
@@ -84,9 +89,47 @@ export class InstagramProvider implements IVideoProvider {
       };
     }
 
-    throw new ProviderFeatureUnsupportedError(
-      'Instagram real metadata extraction is not implemented yet.',
-    );
+    try {
+      const url = `https://www.instagram.com/reel/${videoId}/`;
+      const info = (await ytDlp(url, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        noCheckCertificate: true,
+      })) as Record<string, unknown>;
+
+      const views = info.view_count || 0;
+      const likes = info.like_count || 0;
+      const comments = info.comment_count || 0;
+
+      return {
+        metadata: {
+          platformVideoId: videoId,
+          canonicalUrl: url,
+          title: info.title || 'Instagram Reel',
+          description: info.description || null,
+          creatorName: info.uploader || null,
+          creatorHandle: info.uploader_id ? `@${info.uploader_id}` : null,
+          followerCount: null,
+          views,
+          likes,
+          comments,
+          engagementRate: views > 0 ? ((likes + comments) / views) * 100 : 0,
+          durationSeconds: info.duration || 0,
+          hashtags: info.tags || [],
+          thumbnailUrl: info.thumbnail || null,
+          uploadDate: info.upload_date
+            ? new Date(info.upload_date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'))
+            : null,
+        },
+        sourceAttribution: 'YT_DLP',
+        confidence: 0.9,
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      throw new ProviderError(
+        `[INSTAGRAM_METADATA_ERROR] Failed to extract Instagram metadata: ${errorMsg}`,
+      );
+    }
   }
 
   async fetchTranscript(
@@ -115,9 +158,61 @@ export class InstagramProvider implements IVideoProvider {
       };
     }
 
-    throw new ProviderFeatureUnsupportedError(
-      'Instagram real transcript extraction is not implemented yet.',
-    );
+    const tmpDir = os.tmpdir();
+    const outputAudioPath = path.join(tmpDir, `${videoId}.wav`);
+
+    try {
+      const url = `https://www.instagram.com/reel/${videoId}/`;
+
+      // Download audio
+      await ytDlp(url, {
+        extractAudio: true,
+        audioFormat: 'wav',
+        output: outputAudioPath,
+        noWarnings: true,
+        noCheckCertificate: true,
+      });
+
+      // Transcribe via Whisper
+      const segmentsRaw = await LocalWhisperTranscriber.transcribeAudioFile(outputAudioPath);
+
+      const segments = segmentsRaw.map((s, idx) => ({
+        sequenceIndex: idx,
+        startSeconds: s.start,
+        endSeconds: s.end,
+        text: s.text,
+        sourceType: 'EXTRACTED' as const,
+      }));
+
+      const duration = segments.length > 0 ? segments[segments.length - 1]!.endSeconds : 0;
+
+      return {
+        segments,
+        duration,
+        language: 'en',
+        hasNativeTranscript: false,
+        status: 'AVAILABLE',
+        sourceAttribution: 'WHISPER',
+        confidence: 0.85,
+      };
+    } catch (err) {
+      return {
+        segments: [],
+        duration: 0,
+        language: 'en',
+        hasNativeTranscript: false,
+        status: 'UNAVAILABLE',
+        sourceAttribution: 'WHISPER',
+        confidence: 0,
+      };
+    } finally {
+      // Clean up the temp audio file
+      try {
+        await fs.unlink(outputAudioPath);
+      } catch (e) {
+        // ignore deletion errors if file doesn't exist
+      }
+    }
   }
 
   async fetchVideo(videoId: string, options: ProviderOptions = {}): Promise<ProviderAdapterResult> {

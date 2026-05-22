@@ -54,6 +54,8 @@ model Video {
   // Relationships
   transcriptSegments TranscriptSegment[]
   ingestionJobs      IngestionJob[]
+  retrievalChunks    RetrievalChunk[]
+  embeddingState     VideoEmbeddingState?
   
   // Timestamps
   createdAt         DateTime  @default(now())
@@ -99,6 +101,10 @@ model IngestionJob {
   retryCount      Int      @default(0)
   failureReason   String?  @db.Text
   
+  // Relationships
+  retrievalChunks    RetrievalChunk[]
+  embeddingStates    VideoEmbeddingState[]
+
   // Timestamps
   startedAt       DateTime?
   completedAt     DateTime?
@@ -110,5 +116,69 @@ model IngestionJob {
   @@index([status])
   @@index([provider])
   @@index([createdAt])
+}
+
+// Retrieval Chunks for semantic search
+model RetrievalChunk {
+  id                     String        @id @default(uuid())
+  videoId                String
+  video                  Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  ingestionJobId         String
+  ingestionJob           IngestionJob  @relation(fields: [ingestionJobId], references: [id], onDelete: Cascade)
+  
+  chunkIndex             Int
+  text                   String        @db.Text
+  tokenCount             Int
+  startSeconds           Float
+  endSeconds             Float
+  transcriptSegmentStart Int
+  transcriptSegmentEnd   Int
+  embeddingModel         String
+  metadataSource         String
+  transcriptSource       String
+  embedding              Unsupported("vector(384)")?
+  embeddingProvider      String?
+  embeddingVersion       String?
+  vectorDimensions       Int?
+  embeddingGeneratedAt   DateTime?
+  createdAt              DateTime      @default(now())
+
+  // Indexes
+  @@unique([videoId, chunkIndex])
+  @@index([videoId])
+  @@index([ingestionJobId])
+}
+
+// Enum for video embedding status
+enum EmbeddingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Video embedding state tracking
+model VideoEmbeddingState {
+  id              String          @id @default(uuid())
+  videoId         String          @unique
+  video           Video           @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  ingestionJobId  String
+  ingestionJob    IngestionJob    @relation(fields: [ingestionJobId], references: [id], onDelete: Cascade)
+  status          EmbeddingStatus @default(PENDING)
+  model                String
+  chunkCount           Int             @default(0)
+  chunksProcessed      Int             @default(0)
+  errorMessage         String?         @db.Text
+  embeddingProvider    String?
+  embeddingVersion     String?
+  vectorDimensions     Int?
+  embeddingGeneratedAt DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  // Indexes
+  @@index([videoId])
+  @@index([ingestionJobId])
+  @@index([status])
 }
 

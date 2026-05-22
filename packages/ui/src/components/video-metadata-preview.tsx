@@ -11,6 +11,7 @@ interface VideoMetadataPreviewProps {
   likes: number;
   comments: number;
   engagementRate: number;
+  followerCount?: number | null;
   durationSeconds: number;
   hashtags?: string[];
   thumbnailUrl?: string | null;
@@ -48,7 +49,8 @@ export function VideoMetadataPreview({
   views,
   likes,
   comments,
-  engagementRate,
+
+  followerCount,
   durationSeconds,
   hashtags = [],
   thumbnailUrl,
@@ -76,6 +78,11 @@ export function VideoMetadataPreview({
           <span className="text-slate-400 text-sm">by</span>
           <span className="text-slate-200 font-semibold">{creatorName || creatorHandle}</span>
           {creatorHandle && <span className="text-slate-500 text-sm">@{creatorHandle}</span>}
+          {followerCount != null && (
+            <span className="text-sky-400 text-xs ml-2 px-1.5 py-0.5 bg-sky-900/30 rounded">
+              {formatNumber(followerCount)} followers
+            </span>
+          )}
         </div>
       )}
 
@@ -101,7 +108,9 @@ export function VideoMetadataPreview({
 
         <div className="bg-slate-800 rounded p-3">
           <p className="text-slate-400 text-xs uppercase tracking-wide">Engagement</p>
-          <p className="text-slate-100 font-semibold text-lg">{engagementRate.toFixed(2)}%</p>
+          <p className="text-slate-100 font-semibold text-lg">
+            {views > 0 ? (((likes + comments) / views) * 100).toFixed(2) : '0.00'}%
+          </p>
         </div>
       </div>
 
