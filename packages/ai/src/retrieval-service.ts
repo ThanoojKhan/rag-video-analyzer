@@ -363,7 +363,7 @@ export class RetrievalService {
     params.push(limit, offset);
 
     this.logger.debug('Executing pgvector similarity search raw SQL query');
-    const rows = await prisma.$queryRawUnsafe<QueryResultRow[]>(querySql, ...params);
+    const rows = (await prisma.$queryRawUnsafe(querySql, ...params)) as QueryResultRow[];
     const dbDuration = Date.now() - queryStartTime;
     this.logger.debug('pgvector search query executed', {
       rowsCount: rows.length,
