@@ -1,3 +1,4 @@
+import { type RetrievalChunk } from '@prisma/client';
 import { prisma } from '@rag/db';
 import {
   retrievalQuerySchema,
@@ -27,24 +28,14 @@ const noOpLogger: RetrievalLogger = {
   debug: () => {},
 };
 
-interface QueryResultRow {
-  id: string;
-  videoId: string;
-  chunkIndex: number;
-  text: string;
-  tokenCount: number;
-  startSeconds: number;
-  endSeconds: number;
-  transcriptSegmentStart: number;
-  transcriptSegmentEnd: number;
-  transcriptSource: string;
+type QueryResultRow = RetrievalChunk & {
   videoTitle: string;
   videoUrl: string;
   creatorName: string | null;
   creatorHandle: string | null;
   videoViews: number;
   similarity: number;
-}
+};
 
 interface QueryChunksResult {
   results: RetrievalResult[];
@@ -139,7 +130,10 @@ export class RetrievalService {
       });
     }
 
-    const totalTokens = retrievedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+    const totalTokens = retrievedChunks.reduce(
+      (sum: number, chunk: RetrievalResult) => sum + chunk.tokenCount,
+      0,
+    );
     const totalChars = formattedContextString.length;
     const executionTimeMs = Date.now() - startTime;
 
@@ -429,11 +423,15 @@ export class RetrievalService {
     }
 
     const sortedIndices = results
-      .map((r, i) => ({ r, diag: diagnostics[i]!, score: r.score }))
+      .map((result: RetrievalResult, index: number) => ({
+        r: result,
+        diag: diagnostics[index]!,
+        score: result.score,
+      }))
       .sort((a, b) => b.score - a.score);
 
-    const sortedResults = sortedIndices.map((x) => x.r);
-    const sortedDiagnostics = sortedIndices.map((x) => x.diag);
+    const sortedResults = sortedIndices.map((entry) => entry.r);
+    const sortedDiagnostics = sortedIndices.map((entry) => entry.diag);
 
     return {
       results: sortedResults,
@@ -463,8 +461,8 @@ export class RetrievalService {
     }
 
     return results
-      .map((res, index) => {
-        const cite = res.citation;
+      .map((result: RetrievalResult, index: number) => {
+        const cite = result.citation;
         const creatorInfo = cite.creatorName
           ? ` (Creator: ${cite.creatorName}${cite.creatorHandle ? ` / @${cite.creatorHandle}` : ''})`
           : '';
@@ -476,10 +474,10 @@ Video Source: "${cite.videoTitle}"${creatorInfo}
 URL: ${cite.videoUrl}
 Time Segment: ${timeStart} - ${timeEnd} (Seconds: ${cite.startSeconds.toFixed(1)}s - ${cite.endSeconds.toFixed(1)}s)
 Transcript Provenance: ${cite.transcriptSource} (Segments ${cite.transcriptSegmentStart} to ${cite.transcriptSegmentEnd})
-Relevance Confidence Score: ${(res.score * 100).toFixed(1)}%
+Relevance Confidence Score: ${(result.score * 100).toFixed(1)}%
 Content excerpt:
 """
-${res.text.trim()}
+${result.text.trim()}
 """`;
       })
       .join('\n\n---\n\n');

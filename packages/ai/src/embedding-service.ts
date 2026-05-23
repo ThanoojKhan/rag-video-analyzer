@@ -1,6 +1,6 @@
+import { Prisma, EmbeddingStatus, type RetrievalChunk } from '@prisma/client';
 import { prisma } from '@rag/db';
 import { ProviderHealthTracker, ProviderTransientError } from '@rag/shared';
-import { EmbeddingStatus } from '@prisma/client';
 
 import { pipeline, type FeatureExtractionPipeline, env } from '@xenova/transformers';
 
@@ -39,7 +39,7 @@ export function generateDeterministicMockVector(text: string, dimensions = 384):
     const val = Math.sin(hash + i) * 10000;
     vector[i] = val - Math.floor(val);
   }
-  const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+  const magnitude = Math.sqrt(vector.reduce((sum: number, val: number) => sum + val * val, 0));
   if (magnitude > 0) {
     for (let i = 0; i < dimensions; i++) {
       vector[i] = vector[i]! / magnitude;
@@ -114,7 +114,7 @@ export class EmbeddingService {
       while (attempt < maxRetries && !success) {
         try {
           if (this.isMockMode) {
-            vectors = batch.map((text) => generateDeterministicMockVector(text, 384));
+            vectors = batch.map((text: string) => generateDeterministicMockVector(text, 384));
           } else {
             vectors = await this.fetchLocalEmbedding(batch);
           }
@@ -130,7 +130,7 @@ export class EmbeddingService {
           });
           if (attempt < maxRetries) {
             const delay = Math.pow(2, attempt) * 1000 + Math.random() * 200;
-            await new Promise((resolve) => setTimeout(resolve, delay));
+            await new Promise((resolve: (value: void) => void) => setTimeout(resolve, delay));
           }
         }
       }
@@ -217,7 +217,7 @@ export class EmbeddingService {
         return;
       }
 
-      const texts = chunks.map((c) => c.text);
+      const texts = chunks.map((chunk: RetrievalChunk) => chunk.text);
       this.logger.info(`Generating embeddings for ${chunks.length} chunks`, { videoId });
 
       await prisma.videoEmbeddingState.update({
@@ -231,7 +231,7 @@ export class EmbeddingService {
         videoId,
         chunkCount: chunks.length,
       });
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<void> => {
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i]!;
           const vector = embeddings[i]!;

@@ -48,10 +48,15 @@ export class RetrievalEvaluator {
 
     // 1. Calculate Average Retrieval Score
     const averageRetrievalScore =
-      results.length > 0 ? results.reduce((sum, r) => sum + r.score, 0) / results.length : 0.0;
+      results.length > 0
+        ? results.reduce((sum: number, result: RetrievalResult) => sum + result.score, 0) /
+          results.length
+        : 0.0;
 
     // 2. Query Relevance (based on raw semantic similarity if available)
-    const semanticRawScores = diagnostics.map((d) => d.rawScores.semanticSimilarity);
+    const semanticRawScores = diagnostics.map(
+      (diagnostic: RetrievalRankingDiagnostics) => diagnostic.rawScores.semanticSimilarity,
+    );
     const averageSimilarity =
       semanticRawScores.length > 0
         ? semanticRawScores.reduce((sum, s) => sum + s, 0) / semanticRawScores.length
@@ -294,7 +299,7 @@ export class RetrievalEvaluator {
     const results: ScenarioEvaluationResult[] = [];
 
     const dbVideos = await prisma.video.findMany({ select: { id: true }, take: 5 });
-    const allVideoIds = dbVideos.map((v) => v.id);
+    const allVideoIds = dbVideos.map((video: { id: string }) => video.id);
 
     const retrievalService = new RetrievalService(logger);
 

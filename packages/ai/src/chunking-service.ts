@@ -1,5 +1,13 @@
+import { Prisma, type TranscriptSegment } from '@prisma/client';
 import { prisma } from '@rag/db';
 import { chunkingConfigSchema, type ChunkingConfig } from '@rag/shared';
+
+type TranscriptSegmentRecord = TranscriptSegment;
+type VideoWithTranscriptSegments = Prisma.VideoGetPayload<{
+  include: {
+    transcriptSegments: true;
+  };
+}>;
 
 export interface SegmentInput {
   sequenceIndex: number;
@@ -215,7 +223,7 @@ export class ChunkingService {
   ): Promise<void> {
     logger?.info('Starting createChunksForVideo', { videoId, ingestionJobId });
 
-    const video = await prisma.video.findUnique({
+    const video: VideoWithTranscriptSegments | null = await prisma.video.findUnique({
       where: { id: videoId },
       include: {
         transcriptSegments: {
@@ -232,16 +240,18 @@ export class ChunkingService {
       throw new Error(`No transcript segments found for video: ${videoId}`);
     }
 
-    const segmentsInput: SegmentInput[] = video.transcriptSegments.map((seg) => ({
-      sequenceIndex: seg.sequenceIndex,
-      startSeconds: seg.startSeconds,
-      endSeconds: seg.endSeconds,
-      text: seg.text,
-    }));
+    const segmentsInput: SegmentInput[] = video.transcriptSegments.map(
+      (segment: TranscriptSegmentRecord) => ({
+        sequenceIndex: segment.sequenceIndex,
+        startSeconds: segment.startSeconds,
+        endSeconds: segment.endSeconds,
+        text: segment.text,
+      }),
+    );
 
     const pendingChunks = ChunkingService.chunkTranscript(segmentsInput, options, logger);
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient): Promise<void> => {
       await tx.retrievalChunk.deleteMany({
         where: { videoId },
       });

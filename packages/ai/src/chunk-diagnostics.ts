@@ -1,3 +1,4 @@
+import { Prisma, type RetrievalChunk, type TranscriptSegment } from '@prisma/client';
 import { prisma } from '@rag/db';
 import {
   type ChunkQualityReport,
@@ -5,6 +6,15 @@ import {
   type RetrievalCitation,
 } from '@rag/shared';
 import { ChunkingService, type SegmentInput } from './chunking-service.js';
+
+type TranscriptSegmentRecord = TranscriptSegment;
+type RetrievalChunkRecord = RetrievalChunk;
+type VideoWithChunkData = Prisma.VideoGetPayload<{
+  include: {
+    transcriptSegments: true;
+    retrievalChunks: true;
+  };
+}>;
 
 export class ChunkDiagnosticsService {
   /**
@@ -265,7 +275,7 @@ export class ChunkDiagnosticsService {
    * Retrieves database retrieval chunk details and performs complete diagnostics checks.
    */
   static async analyzeVideoChunks(videoId: string): Promise<ChunkQualityReport> {
-    const video = await prisma.video.findUnique({
+    const video: VideoWithChunkData | null = await prisma.video.findUnique({
       where: { id: videoId },
       include: {
         transcriptSegments: {
@@ -281,21 +291,23 @@ export class ChunkDiagnosticsService {
       throw new Error(`Video not found: ${videoId}`);
     }
 
-    const segments: SegmentInput[] = video.transcriptSegments.map((s) => ({
-      sequenceIndex: s.sequenceIndex,
-      startSeconds: s.startSeconds,
-      endSeconds: s.endSeconds,
-      text: s.text,
-    }));
+    const segments: SegmentInput[] = video.transcriptSegments.map(
+      (segment: TranscriptSegmentRecord) => ({
+        sequenceIndex: segment.sequenceIndex,
+        startSeconds: segment.startSeconds,
+        endSeconds: segment.endSeconds,
+        text: segment.text,
+      }),
+    );
 
-    const chunks = video.retrievalChunks.map((c) => ({
-      chunkIndex: c.chunkIndex,
-      text: c.text,
-      tokenCount: c.tokenCount,
-      startSeconds: c.startSeconds,
-      endSeconds: c.endSeconds,
-      transcriptSegmentStart: c.transcriptSegmentStart,
-      transcriptSegmentEnd: c.transcriptSegmentEnd,
+    const chunks = video.retrievalChunks.map((chunk: RetrievalChunkRecord) => ({
+      chunkIndex: chunk.chunkIndex,
+      text: chunk.text,
+      tokenCount: chunk.tokenCount,
+      startSeconds: chunk.startSeconds,
+      endSeconds: chunk.endSeconds,
+      transcriptSegmentStart: chunk.transcriptSegmentStart,
+      transcriptSegmentEnd: chunk.transcriptSegmentEnd,
     }));
 
     return ChunkDiagnosticsService.analyzePendingChunks(
