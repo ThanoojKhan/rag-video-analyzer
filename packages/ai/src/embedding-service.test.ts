@@ -58,23 +58,21 @@ describe('EmbeddingService', () => {
       expect(result[1]).toHaveLength(384);
     });
 
-    it('should call fetch and batch texts when apiKey is present', async () => {
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [
-            { index: 0, embedding: new Array(384).fill(0.1) },
-            { index: 1, embedding: new Array(384).fill(0.2) },
-          ],
-        }),
+    it('should generate vectors when not in mock mode', async () => {
+      // Create a mock extractor
+      const mockExtractor = vi.fn().mockResolvedValue({
+        tolist: () => [new Array(384).fill(0.1), new Array(384).fill(0.2)],
       });
-      global.fetch = fetchMock;
-
+      // Need to override the pipelinePromise on the service directly or mock it
       const service = new EmbeddingService(undefined, 'mock-api-key');
+      // Hack to mock the private pipelinePromise
+      // @ts-expect-error - testing private property
+      service.pipelinePromise = Promise.resolve(mockExtractor);
+
       const texts = ['Text A', 'Text B'];
       const result = await service.generateEmbeddings(texts);
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(mockExtractor).toHaveBeenCalledTimes(1);
       expect(result).toHaveLength(2);
       expect(result[0][0]).toBe(0.1);
       expect(result[1][0]).toBe(0.2);
@@ -82,21 +80,19 @@ describe('EmbeddingService', () => {
 
     it('should retry on failure with backoff', async () => {
       let callCount = 0;
-      const fetchMock = vi.fn().mockImplementation(async () => {
+      const mockExtractor = vi.fn().mockImplementation(async () => {
         callCount++;
         if (callCount < 2) {
-          return { ok: false, status: 500, text: async () => 'Internal Error' };
+          throw new Error('Pipeline error');
         }
         return {
-          ok: true,
-          json: async () => ({
-            data: [{ index: 0, embedding: new Array(384).fill(0.5) }],
-          }),
+          tolist: () => [new Array(384).fill(0.5)],
         };
       });
-      global.fetch = fetchMock;
 
       const service = new EmbeddingService(undefined, 'mock-api-key');
+      // @ts-expect-error - testing private property
+      service.pipelinePromise = Promise.resolve(mockExtractor);
       const result = await service.generateEmbeddings(['Retry Text'], 2);
 
       expect(callCount).toBe(2);

@@ -5,7 +5,6 @@ import { YouTubeProvider } from '../src/adapters/youtube';
 import { InstagramProvider } from '../src/adapters/instagram';
 import { TikTokProvider } from '../src/adapters/tiktok';
 import { ProviderMode } from '../src/types/provider';
-import { ProviderFeatureUnsupportedError } from '../src/errors';
 
 describe('URLValidator', () => {
   describe('validate', () => {
@@ -242,14 +241,6 @@ describe('YouTubeProvider', () => {
       expect(transcript?.status).toBe('AVAILABLE');
       expect(transcript?.sourceAttribution).toBe('MOCK');
       expect(transcript?.hasNativeTranscript).toBe(true);
-    });
-
-    it('should throw for real mode until implementation is available', async () => {
-      await expect(
-        provider.fetchMetadata('dQw4w9WgXcQ', {
-          mode: ProviderMode.REAL,
-        }),
-      ).rejects.toBeInstanceOf(ProviderFeatureUnsupportedError);
     });
   });
 });

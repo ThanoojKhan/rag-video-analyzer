@@ -26,7 +26,7 @@ export const appEnvSchema = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
     DATABASE_URL: z.string().url(),
-    REDIS_URL: z.string().url(),
+    REDIS_URL: z.string().url().optional(),
     CORS_ORIGIN: z.string().url().optional(),
     NEXT_PUBLIC_API_BASE_URL: z.string().url().optional(),
     GOOGLE_API_KEY: z.string().optional(),
@@ -47,7 +47,7 @@ export const workerEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().url().optional(),
   GOOGLE_API_KEY: z.string().optional(),
 });
 
