@@ -12,6 +12,7 @@
     }
   },
   "scripts": {
+    "prebuild": "pnpm run prisma:generate",
     "build": "tsc --build",
     "lint": "eslint . --ext .ts",
     "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
